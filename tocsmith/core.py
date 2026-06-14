@@ -123,7 +123,10 @@ def _detect_toc_mode(toc_text: str, min_len: int = 1) -> TocMode:
 
 
 def _parse_toc_lines_numbering(
-    toc_text: str, page_offset: int = 0, min_len: int = 1
+    toc_text: str,
+    page_offset: int = 0,
+    min_len: int = 1,
+    keep_numbering: bool = True,
 ) -> List[Heading]:
     headings: List[Heading] = []
     for raw_line in toc_text.splitlines():
@@ -143,13 +146,13 @@ def _parse_toc_lines_numbering(
         if num_m:
             numbering = num_m.group("num")
             title_part = line_wo_page[num_m.end() :].strip()
-        if numbering:
+        if numbering and keep_numbering:
             combined = f"{numbering.strip()} {title_part}".strip()
         else:
             combined = title_part
         title = re.sub(r"\s+", " ", combined)
         if not title:
-            title = line_wo_page.strip()
+            title = line_wo_page.strip() if keep_numbering else title_part.strip()
         if star_prefix:
             title = f"{star_prefix}{title}".strip()
         level = _infer_level_from_numbering(numbering)
@@ -196,6 +199,7 @@ def parse_toc_lines(
     page_offset: int = 0,
     min_len: int = 1,
     mode: TocMode = "auto",
+    keep_numbering: bool = True,
 ) -> List[Heading]:
     """
     Parse a pasted TOC text into Heading entries.
@@ -203,12 +207,15 @@ def parse_toc_lines(
     - mode="numbering": hierarchy from leading numbers like "1", "1.1", "第1章"
     - mode="indent": hierarchy from leading spaces/tabs
     - mode="auto": detect numbering vs indent automatically
+    - keep_numbering: when True (default), numbering prefix is kept in bookmark titles
     - page_offset is added to the parsed page number to map to PDF actual pages
     """
     resolved_mode = _detect_toc_mode(toc_text, min_len) if mode == "auto" else mode
     if resolved_mode == "indent":
         return _parse_toc_lines_indent(toc_text, page_offset=page_offset, min_len=min_len)
-    return _parse_toc_lines_numbering(toc_text, page_offset=page_offset, min_len=min_len)
+    return _parse_toc_lines_numbering(
+        toc_text, page_offset=page_offset, min_len=min_len, keep_numbering=keep_numbering
+    )
 
 
 ## URL/website TOC fetching intentionally removed; only manual text input is supported.

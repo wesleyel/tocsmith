@@ -205,6 +205,31 @@ def test_parse_toc_lines_auto_detect_indent():
     assert [h.level for h in hs] == [1, 2, 3]
 
 
+def test_parse_toc_lines_strip_numbering_when_disabled():
+    toc = "\n".join([
+        "第1章 计算机系统概述 1",
+        "1.1 操作系统的基本概念 2",
+        "2 其他章节 10",
+    ])
+    hs = parse_toc_lines(toc, page_offset=0, keep_numbering=False)
+    titles = [h.title for h in hs]
+    assert any(t == "计算机系统概述" for t in titles)
+    assert any(t == "操作系统的基本概念" for t in titles)
+    assert any(t == "其他章节" for t in titles)
+    assert [h.level for h in hs] == [1, 2, 1]
+
+
+def test_parse_toc_lines_strip_numbering_with_asterisk():
+    toc = "\n".join([
+        "*1.1 星标小节 12",
+        "* 2 星标章节 13",
+    ])
+    hs = parse_toc_lines(toc, page_offset=0, keep_numbering=False)
+    titles = [h.title for h in hs]
+    assert any(t == "*星标小节" for t in titles)
+    assert any(t == "*星标章节" for t in titles)
+
+
 def test_parse_toc_lines_auto_detect_numbering():
     toc = "\n".join([
         "第1章 基础 1",

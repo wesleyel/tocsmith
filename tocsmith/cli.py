@@ -30,6 +30,12 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         help="TOC hierarchy mode: numbering (1/1.1), indent (spaces), or auto-detect",
     )
     p.add_argument(
+        "--keep-numbering",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Keep numbering prefix in bookmark titles (numbering mode only)",
+    )
+    p.add_argument(
         "-c",
         "--config",
         help="Path to a TOML config file for batch tasks (overrides single-run args)",
@@ -53,6 +59,7 @@ def _run_single(
     min_len: int,
     toc_text: Optional[str] = None,
     toc_mode: TocMode = "auto",
+    keep_numbering: bool = True,
 ) -> int:
     """Run a single task and return process exit code."""
     if not src.exists():
@@ -63,12 +70,20 @@ def _run_single(
     headings = []
     if toc_text is not None and toc_text.strip():
         headings = parse_toc_lines(
-            toc_text, page_offset=page_offset, min_len=min_len, mode=toc_mode
+            toc_text,
+            page_offset=page_offset,
+            min_len=min_len,
+            mode=toc_mode,
+            keep_numbering=keep_numbering,
         )
     elif toc_file:
         file_text = Path(toc_file).read_text(encoding="utf-8")
         headings = parse_toc_lines(
-            file_text, page_offset=page_offset, min_len=min_len, mode=toc_mode
+            file_text,
+            page_offset=page_offset,
+            min_len=min_len,
+            mode=toc_mode,
+            keep_numbering=keep_numbering,
         )
     else:
         print("No TOC source provided (use --toc-file). Producing a copy without outline.")
@@ -98,6 +113,7 @@ def _run_batch(config_path: Path) -> int:
     page_offset = 10                     # optional overrides default
     min_len = 2                          # optional overrides default
     toc_mode = "auto"                    # optional: auto | numbering | indent
+    keep_numbering = true                # optional: keep numbering in bookmark titles
     '''
     if tomllib is None:
         print("Error: TOML support not available. Please install 'tomli' for Python < 3.11.")
@@ -123,6 +139,7 @@ def _run_batch(config_path: Path) -> int:
     if default_toc_mode not in ("auto", "numbering", "indent"):
         print(f"Invalid defaults.toc_mode: {default_toc_mode!r}")
         return 2
+    default_keep_numbering = bool(defaults.get("keep_numbering", True))
     input_prefix = str(defaults.get("input_prefix", "")).strip() or ""
     output_prefix = str(defaults.get("output_prefix", "")).strip() or ""
     output_suffix = (
@@ -160,11 +177,13 @@ def _run_batch(config_path: Path) -> int:
             print(f"[Task {idx}] Skipped: invalid toc_mode {toc_mode!r}")
             failures += 1
             continue
+        keep_numbering = bool(t.get("keep_numbering", default_keep_numbering))
 
         print(
             f"[Task {idx}] Running: src={src} out={out} "
             f"toc={'inline' if (toc_inline and toc_inline.strip()) else (toc_file or '<none>')} "
-            f"offset={page_offset} min_len={min_len} toc_mode={toc_mode}"
+            f"offset={page_offset} min_len={min_len} toc_mode={toc_mode} "
+            f"keep_numbering={keep_numbering}"
         )
         try:
             # Ensure output directory exists
@@ -177,6 +196,7 @@ def _run_batch(config_path: Path) -> int:
                 min_len=min_len,
                 toc_text=toc_inline,
                 toc_mode=toc_mode,  # type: ignore[arg-type]
+                keep_numbering=keep_numbering,
             )
             if code != 0:
                 failures += 1
@@ -209,6 +229,7 @@ def main(argv: List[str] | None = None) -> int:
         page_offset=ns.page_offset,
         min_len=ns.min_len,
         toc_mode=ns.toc_mode,
+        keep_numbering=ns.keep_numbering,
     )
 
 

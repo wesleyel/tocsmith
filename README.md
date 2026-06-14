@@ -9,11 +9,11 @@
 ## 功能概览
 - 手动粘贴目录文本（每行以书中页码结尾），自动解析标题、页码与层级（1..6）
 - 支持两种层级解析方式：
-  - **按序号**：`1 标题 1` / `1.1 子标题 2` / `1.1.1 子子标题 3`，序号会保留在 PDF 书签标题中
+  - **按序号**：`1 标题 1` / `1.1 子标题 2` / `1.1.1 子子标题 3`，可通过 `keep_numbering` 控制序号是否写入书签标题
   - **按缩进**：通过行首空格/Tab 缩进表示层级，标题不含序号
   - 默认 `auto` 自动识别；也可通过 `--toc-mode` 或配置 `toc_mode` 显式指定
 - 支持页码偏移（实际页码 - 书籍页码），用于扫描件/前置页差异
-- 编号前缀会被保留到标题中：如 `第1章`、`1.1` 将出现在最终书签标题里
+- 按序号模式下，默认保留编号前缀到标题中（如 `第1章`、`1.1`）；设置 `keep_numbering = false` 或 `--no-keep-numbering` 可仅用于推断层级
 - 支持行首星号标记：允许输入 `*1.1 Title` 或 `* 1.1 Title`，输出统一为 `*1.1 Title`
 - 将条目以父子层级写入 PDF 书签
 - 提供 CLI 与 GUI；亦可通过 Python API 使用
@@ -71,6 +71,8 @@ page_offset = 0
 min_len = 3
 # TOC hierarchy mode: auto | numbering | indent
 toc_mode = "auto"
+# keep numbering prefix in bookmark titles (numbering mode only)
+keep_numbering = true
 
 # input folder
 input_prefix = "input"
@@ -90,6 +92,7 @@ toc = """
 page_offset = 10
 min_len = 2
 toc_mode = "numbering"
+keep_numbering = false
 ```
 
 ### 目录文本格式
@@ -117,7 +120,7 @@ tocsmith --config config.toml
 ```
 
 说明：
-- `defaults` 中的 `page_offset`、`min_len`、`toc_mode` 可被每个任务覆盖。
+- `defaults` 中的 `page_offset`、`min_len`、`toc_mode`、`keep_numbering` 可被每个任务覆盖。
 - `input_prefix` 用于解析任务中的 `input_file`；`output_prefix` 为输出目录根。
 - 输出文件名为 `{stem}{output_suffix}`，其中 `stem` 来源于 `input_file`。
 - 任务可直接内联 `toc` 文本；也兼容 `toc_file` 指定外部文件。
@@ -134,6 +137,7 @@ uv run python -m tocsmith.gui
 - 可选：修改输出路径
 - 在 “TOC text” 中粘贴目录文本；在 “Page Offset” 填写偏移（实际 - 书籍）
 - 选择 “TOC Mode”：`auto`（自动识别）、`numbering`（按序号）、`indent`（按缩进）
+- 勾选 “Keep numbering” 控制按序号模式下是否保留标题中的序号（默认保留）
 - 点击 “Parse TOC Text” 查看解析结果
 - 点击 “Generate” 生成带书签的 PDF
 

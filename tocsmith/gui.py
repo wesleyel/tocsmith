@@ -77,7 +77,14 @@ class App:
             state="readonly",
             width=10,
         )
-        self.toc_mode_combo.pack(side=tk.LEFT, padx=(4, 0))
+        self.toc_mode_combo.pack(side=tk.LEFT, padx=(4, 12))
+
+        self.keep_numbering_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            ctrl,
+            text="Keep numbering",
+            variable=self.keep_numbering_var,
+        ).pack(side=tk.LEFT)
 
         # TOC input
         toc_row = ttk.Frame(frm)
@@ -181,7 +188,11 @@ class App:
         mode = self.toc_mode_var.get() or "auto"
         if mode not in ("auto", "numbering", "indent"):
             mode = "auto"
-        return {"page_offset": offset, "mode": mode}
+        return {
+            "page_offset": offset,
+            "mode": mode,
+            "keep_numbering": self.keep_numbering_var.get(),
+        }
 
     def _on_generate(self) -> None:
         if not self.in_var.get():
