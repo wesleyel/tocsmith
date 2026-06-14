@@ -68,6 +68,17 @@ class App:
         self.offset_entry = ttk.Entry(ctrl, textvariable=self.offset_var, width=6)
         self.offset_entry.pack(side=tk.LEFT, padx=(4, 12))
 
+        ttk.Label(ctrl, text="TOC Mode:").pack(side=tk.LEFT)
+        self.toc_mode_var = tk.StringVar(value="auto")
+        self.toc_mode_combo = ttk.Combobox(
+            ctrl,
+            textvariable=self.toc_mode_var,
+            values=["auto", "numbering", "indent"],
+            state="readonly",
+            width=10,
+        )
+        self.toc_mode_combo.pack(side=tk.LEFT, padx=(4, 0))
+
         # TOC input
         toc_row = ttk.Frame(frm)
         toc_row.pack(fill=tk.BOTH, expand=True)
@@ -162,6 +173,16 @@ class App:
 
     # Auto analysis removed
 
+    def _get_parse_kwargs(self) -> dict:
+        try:
+            offset = int(self.offset_var.get() or 0)
+        except ValueError:
+            offset = 0
+        mode = self.toc_mode_var.get() or "auto"
+        if mode not in ("auto", "numbering", "indent"):
+            mode = "auto"
+        return {"page_offset": offset, "mode": mode}
+
     def _on_generate(self) -> None:
         if not self.in_var.get():
             messagebox.showwarning("Missing", "Please choose an input PDF")
@@ -176,11 +197,7 @@ class App:
             text = self.toc_text.get("1.0", tk.END).strip()
             hs = []
             if text:
-                try:
-                    offset = int(self.offset_var.get() or 0)
-                except ValueError:
-                    offset = 0
-                hs = await run_in_thread(parse_toc_lines, text, offset)
+                hs = await run_in_thread(parse_toc_lines, text, **self._get_parse_kwargs())
             else:
                 hs = []
             await run_in_thread(generate_bookmarks, self.in_var.get(), self.out_var.get(), hs)
@@ -194,14 +211,9 @@ class App:
         if not text:
             messagebox.showwarning("Empty", "Please paste TOC text or URL first")
             return
-        try:
-            offset = int(self.offset_var.get() or 0)
-        except ValueError:
-            offset = 0
-
         async def task():
             self._set_status("Parsing TOC…")
-            hs = await run_in_thread(parse_toc_lines, text, offset)
+            hs = await run_in_thread(parse_toc_lines, text, **self._get_parse_kwargs())
             self._populate_tree(hs)
             self._set_status(f"Parsed {len(hs)} entries")
 

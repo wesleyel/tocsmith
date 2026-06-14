@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Iterable, List, Tuple, Optional
+from functools import reduce
+from math import gcd
+from typing import Iterable, List, Literal, Tuple, Optional
+
+TocMode = Literal["numbering", "indent", "auto"]
 
 from pypdf import PdfReader, PdfWriter
 
@@ -58,63 +62,153 @@ def _infer_level_from_numbering(num: Optional[str]) -> int:
     return 1
 
 
-def parse_toc_lines(toc_text: str, page_offset: int = 0, min_len: int = 1) -> List[Heading]:
-    """
-    Parse a pasted TOC text into Heading entries.
-    - Each line should end with the book page number (digits)
-    - Leading numbering like "第1章" or "1.2" is used to infer the level
-    - page_offset is added to the parsed page number to map to PDF actual pages
-    """
+def _leading_indent_width(raw_line: str) -> int:
+    width = 0
+    for ch in raw_line:
+        if ch == " ":
+            width += 1
+        elif ch == "\t":
+            width += 4
+        else:
+            break
+    return width
+
+
+def _detect_indent_unit(indents: Iterable[int]) -> int:
+    non_zero = sorted({i for i in indents if i > 0})
+    if not non_zero:
+        return 4
+    unit = non_zero[0]
+    if all(i % unit == 0 for i in indents):
+        return max(1, unit)
+    return max(1, reduce(gcd, non_zero))
+
+
+def _infer_level_from_indent(indent: int, unit: int) -> int:
+    if indent <= 0:
+        return 1
+    return min(6, max(1, indent // unit + 1))
+
+
+def _strip_star_prefix(line: str) -> Tuple[str, str]:
+    star_prefix = ""
+    m_star = re.match(r"^\*+\s*", line)
+    if m_star:
+        star_prefix = "*" * m_star.group(0).count("*")
+        line = line[m_star.end() :].lstrip()
+    return star_prefix, line
+
+
+def _detect_toc_mode(toc_text: str, min_len: int = 1) -> TocMode:
+    """Auto-detect whether TOC hierarchy is expressed by numbering or indentation."""
+    indent_signals = 0
+    numbering_signals = 0
+    for raw_line in toc_text.splitlines():
+        if len(raw_line.strip()) < min_len:
+            continue
+        line = raw_line.lstrip()
+        _, line = _strip_star_prefix(line)
+        page_m = _TRAILING_PAGE_RE.search(line)
+        if not page_m:
+            continue
+        line_wo_page = line[: page_m.start()].rstrip()
+        indent = _leading_indent_width(raw_line)
+        num_m = _NUM_PREFIX_RE.match(line_wo_page)
+        has_numbering = bool(num_m and num_m.group("num"))
+        if has_numbering:
+            numbering_signals += 1
+        elif indent > 0:
+            indent_signals += 1
+    return "indent" if indent_signals > numbering_signals else "numbering"
+
+
+def _parse_toc_lines_numbering(
+    toc_text: str, page_offset: int = 0, min_len: int = 1
+) -> List[Heading]:
     headings: List[Heading] = []
     for raw_line in toc_text.splitlines():
         line = raw_line.strip()
         if len(line) < min_len:
             continue
-        # Detect and temporarily strip leading asterisk marker(s)
-        star_prefix = ""
-        m_star = re.match(r"^\*+\s*", line)
-        if m_star:
-            stars = m_star.group(0)
-            star_count = stars.count("*")
-            # Preserve star(s) without trailing space; spacing will be normalized later
-            star_prefix = ("*" * star_count)
-            line = line[m_star.end() :].lstrip()
+        star_prefix, line = _strip_star_prefix(line)
 
-        # Extract trailing page digits
         page_m = _TRAILING_PAGE_RE.search(line)
         if not page_m:
             continue
         page_num = int(page_m.group("page"))
-        # Remove trailing page from the line
         line_wo_page = line[: page_m.start()].rstrip()
-        # Extract leading numbering if exists
         num_m = _NUM_PREFIX_RE.match(line_wo_page)
         numbering = None
         title_part = line_wo_page
         if num_m:
             numbering = num_m.group("num")
             title_part = line_wo_page[num_m.end() :].strip()
-        # Build title while preserving numbering prefix (e.g., "第1章" or "1.1")
         if numbering:
             combined = f"{numbering.strip()} {title_part}".strip()
         else:
             combined = title_part
-        # Cleanup whitespace
         title = re.sub(r"\s+", " ", combined)
         if not title:
-            # fallback to raw without numbering
             title = line_wo_page.strip()
-        # Restore asterisk prefix if present
         if star_prefix:
-            # No space between star(s) and numbering/title
             title = f"{star_prefix}{title}".strip()
         level = _infer_level_from_numbering(numbering)
         pdf_page = max(1, page_num + page_offset)
         headings.append(Heading(title=title, page=pdf_page, level=level))
 
-    # Sort by page then by inferred level
     headings.sort(key=lambda h: (h.page, h.level, h.title.lower()))
     return headings
+
+
+def _parse_toc_lines_indent(toc_text: str, page_offset: int = 0, min_len: int = 1) -> List[Heading]:
+    lines_data: List[Tuple[int, str, int]] = []
+    indents: List[int] = []
+    for raw_line in toc_text.splitlines():
+        if len(raw_line.strip()) < min_len:
+            continue
+        indent = _leading_indent_width(raw_line)
+        line = raw_line.lstrip()
+        star_prefix, line = _strip_star_prefix(line)
+
+        page_m = _TRAILING_PAGE_RE.search(line)
+        if not page_m:
+            continue
+        page_num = int(page_m.group("page"))
+        title = re.sub(r"\s+", " ", line[: page_m.start()].rstrip())
+        if star_prefix:
+            title = f"{star_prefix}{title}".strip()
+        indents.append(indent)
+        lines_data.append((indent, title, page_num))
+
+    unit = _detect_indent_unit(indents)
+    headings: List[Heading] = []
+    for indent, title, page_num in lines_data:
+        level = _infer_level_from_indent(indent, unit)
+        pdf_page = max(1, page_num + page_offset)
+        headings.append(Heading(title=title, page=pdf_page, level=level))
+
+    headings.sort(key=lambda h: (h.page, h.level, h.title.lower()))
+    return headings
+
+
+def parse_toc_lines(
+    toc_text: str,
+    page_offset: int = 0,
+    min_len: int = 1,
+    mode: TocMode = "auto",
+) -> List[Heading]:
+    """
+    Parse a pasted TOC text into Heading entries.
+    - Each line should end with the book page number (digits)
+    - mode="numbering": hierarchy from leading numbers like "1", "1.1", "第1章"
+    - mode="indent": hierarchy from leading spaces/tabs
+    - mode="auto": detect numbering vs indent automatically
+    - page_offset is added to the parsed page number to map to PDF actual pages
+    """
+    resolved_mode = _detect_toc_mode(toc_text, min_len) if mode == "auto" else mode
+    if resolved_mode == "indent":
+        return _parse_toc_lines_indent(toc_text, page_offset=page_offset, min_len=min_len)
+    return _parse_toc_lines_numbering(toc_text, page_offset=page_offset, min_len=min_len)
 
 
 ## URL/website TOC fetching intentionally removed; only manual text input is supported.

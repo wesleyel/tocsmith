@@ -163,3 +163,57 @@ def test_parse_toc_lines_preserve_numbering_with_asterisk():
     assert any(t.startswith("*2 ") and "星标章节" in t for t in titles)
 
 
+def test_parse_toc_lines_numbering_mode_example():
+    toc = "\n".join([
+        "1  我是标题  1",
+        "1.1  我是子标题  2",
+        "1.1.1  我是子子标题  3",
+    ])
+    hs = parse_toc_lines(toc, page_offset=0, mode="numbering")
+    assert len(hs) == 3
+    assert hs[0].title == "1 我是标题"
+    assert hs[0].level == 1
+    assert hs[1].title == "1.1 我是子标题"
+    assert hs[1].level == 2
+    assert hs[2].title == "1.1.1 我是子子标题"
+    assert hs[2].level == 3
+
+
+def test_parse_toc_lines_indent_mode_example():
+    toc = "\n".join([
+        "我是标题  1",
+        "    我是子标题  2",
+        "        我是子子标题  3",
+    ])
+    hs = parse_toc_lines(toc, page_offset=0, mode="indent")
+    assert len(hs) == 3
+    assert hs[0].title == "我是标题"
+    assert hs[0].level == 1
+    assert hs[1].title == "我是子标题"
+    assert hs[1].level == 2
+    assert hs[2].title == "我是子子标题"
+    assert hs[2].level == 3
+
+
+def test_parse_toc_lines_auto_detect_indent():
+    toc = "\n".join([
+        "Chapter A 1",
+        "    Section B 2",
+        "        Subsection C 3",
+    ])
+    hs = parse_toc_lines(toc, page_offset=0, mode="auto")
+    assert [h.level for h in hs] == [1, 2, 3]
+
+
+def test_parse_toc_lines_auto_detect_numbering():
+    toc = "\n".join([
+        "第1章 基础 1",
+        "1.1 小节 2",
+    ])
+    hs = parse_toc_lines(toc, page_offset=0, mode="auto")
+    assert hs[0].level == 1
+    assert hs[1].level == 2
+    assert hs[0].title.startswith("第1章")
+    assert hs[1].title.startswith("1.1")
+
+

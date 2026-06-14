@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import sys
 
-from .core import generate_bookmarks, parse_toc_lines
+from .core import TocMode, generate_bookmarks, parse_toc_lines
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -23,6 +23,12 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     p.add_argument("--min-len", type=int, default=3, help="Minimum heading text length")
     p.add_argument("--page-offset", type=int, default=0, help="Page offset: actual - book page")
     p.add_argument("--toc-file", help="Path to a text file containing TOC lines")
+    p.add_argument(
+        "--toc-mode",
+        choices=["auto", "numbering", "indent"],
+        default="auto",
+        help="TOC hierarchy mode: numbering (1/1.1), indent (spaces), or auto-detect",
+    )
     p.add_argument(
         "-c",
         "--config",
@@ -46,6 +52,7 @@ def _run_single(
     page_offset: int,
     min_len: int,
     toc_text: Optional[str] = None,
+    toc_mode: TocMode = "auto",
 ) -> int:
     """Run a single task and return process exit code."""
     if not src.exists():
@@ -55,10 +62,14 @@ def _run_single(
 
     headings = []
     if toc_text is not None and toc_text.strip():
-        headings = parse_toc_lines(toc_text, page_offset=page_offset, min_len=min_len)
+        headings = parse_toc_lines(
+            toc_text, page_offset=page_offset, min_len=min_len, mode=toc_mode
+        )
     elif toc_file:
         file_text = Path(toc_file).read_text(encoding="utf-8")
-        headings = parse_toc_lines(file_text, page_offset=page_offset, min_len=min_len)
+        headings = parse_toc_lines(
+            file_text, page_offset=page_offset, min_len=min_len, mode=toc_mode
+        )
     else:
         print("No TOC source provided (use --toc-file). Producing a copy without outline.")
         headings = []
@@ -86,6 +97,7 @@ def _run_batch(config_path: Path) -> int:
     # Alternatively: toc_file = "toc.txt"
     page_offset = 10                     # optional overrides default
     min_len = 2                          # optional overrides default
+    toc_mode = "auto"                    # optional: auto | numbering | indent
     '''
     if tomllib is None:
         print("Error: TOML support not available. Please install 'tomli' for Python < 3.11.")
@@ -107,6 +119,10 @@ def _run_batch(config_path: Path) -> int:
 
     default_page_offset = int(defaults.get("page_offset", 0) or 0)
     default_min_len = int(defaults.get("min_len", 3) or 3)
+    default_toc_mode = str(defaults.get("toc_mode", "auto") or "auto").strip() or "auto"
+    if default_toc_mode not in ("auto", "numbering", "indent"):
+        print(f"Invalid defaults.toc_mode: {default_toc_mode!r}")
+        return 2
     input_prefix = str(defaults.get("input_prefix", "")).strip() or ""
     output_prefix = str(defaults.get("output_prefix", "")).strip() or ""
     output_suffix = (
@@ -139,11 +155,16 @@ def _run_batch(config_path: Path) -> int:
         toc_file = _resolve_relative(base_dir, t.get("toc_file"))
         page_offset = int(t.get("page_offset", default_page_offset) or default_page_offset)
         min_len = int(t.get("min_len", default_min_len) or default_min_len)
+        toc_mode = str(t.get("toc_mode", default_toc_mode) or default_toc_mode).strip() or "auto"
+        if toc_mode not in ("auto", "numbering", "indent"):
+            print(f"[Task {idx}] Skipped: invalid toc_mode {toc_mode!r}")
+            failures += 1
+            continue
 
         print(
             f"[Task {idx}] Running: src={src} out={out} "
             f"toc={'inline' if (toc_inline and toc_inline.strip()) else (toc_file or '<none>')} "
-            f"offset={page_offset} min_len={min_len}"
+            f"offset={page_offset} min_len={min_len} toc_mode={toc_mode}"
         )
         try:
             # Ensure output directory exists
@@ -155,6 +176,7 @@ def _run_batch(config_path: Path) -> int:
                 page_offset=page_offset,
                 min_len=min_len,
                 toc_text=toc_inline,
+                toc_mode=toc_mode,  # type: ignore[arg-type]
             )
             if code != 0:
                 failures += 1
@@ -186,6 +208,7 @@ def main(argv: List[str] | None = None) -> int:
         toc_file=Path(ns.toc_file) if ns.toc_file else None,
         page_offset=ns.page_offset,
         min_len=ns.min_len,
+        toc_mode=ns.toc_mode,
     )
 
 

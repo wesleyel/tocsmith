@@ -8,6 +8,10 @@
 
 ## 功能概览
 - 手动粘贴目录文本（每行以书中页码结尾），自动解析标题、页码与层级（1..6）
+- 支持两种层级解析方式：
+  - **按序号**：`1 标题 1` / `1.1 子标题 2` / `1.1.1 子子标题 3`，序号会保留在 PDF 书签标题中
+  - **按缩进**：通过行首空格/Tab 缩进表示层级，标题不含序号
+  - 默认 `auto` 自动识别；也可通过 `--toc-mode` 或配置 `toc_mode` 显式指定
 - 支持页码偏移（实际页码 - 书籍页码），用于扫描件/前置页差异
 - 编号前缀会被保留到标题中：如 `第1章`、`1.1` 将出现在最终书签标题里
 - 支持行首星号标记：允许输入 `*1.1 Title` 或 `* 1.1 Title`，输出统一为 `*1.1 Title`
@@ -65,6 +69,8 @@ tocsmith --help
 page_offset = 0
 # global minimum length
 min_len = 3
+# TOC hierarchy mode: auto | numbering | indent
+toc_mode = "auto"
 
 # input folder
 input_prefix = "input"
@@ -83,6 +89,25 @@ toc = """
 """
 page_offset = 10
 min_len = 2
+toc_mode = "numbering"
+```
+
+### 目录文本格式
+
+**按序号**（`toc_mode = "numbering"` 或自动识别）：
+
+```
+1  我是标题  1
+1.1  我是子标题  2
+1.1.1  我是子子标题  3
+```
+
+**按缩进**（`toc_mode = "indent"` 或自动识别）：
+
+```
+我是标题  1
+    我是子标题  2
+        我是子子标题  3
 ```
 
 运行：
@@ -92,7 +117,7 @@ tocsmith --config config.toml
 ```
 
 说明：
-- `defaults` 中的 `page_offset`、`min_len` 可被每个任务覆盖。
+- `defaults` 中的 `page_offset`、`min_len`、`toc_mode` 可被每个任务覆盖。
 - `input_prefix` 用于解析任务中的 `input_file`；`output_prefix` 为输出目录根。
 - 输出文件名为 `{stem}{output_suffix}`，其中 `stem` 来源于 `input_file`。
 - 任务可直接内联 `toc` 文本；也兼容 `toc_file` 指定外部文件。
@@ -108,6 +133,7 @@ uv run python -m tocsmith.gui
 - 选择输入 PDF
 - 可选：修改输出路径
 - 在 “TOC text” 中粘贴目录文本；在 “Page Offset” 填写偏移（实际 - 书籍）
+- 选择 “TOC Mode”：`auto`（自动识别）、`numbering`（按序号）、`indent`（按缩进）
 - 点击 “Parse TOC Text” 查看解析结果
 - 点击 “Generate” 生成带书签的 PDF
 
