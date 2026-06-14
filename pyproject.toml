@@ -1,6 +1,6 @@
 [project]
 name = "tocsmith"
-version = "0.1.0"
+version = "0.2.0"
 description = "Create PDF bookmarks automatically using heuristics, with CLI and async tkinter GUI"
 authors = [{ name = "Wesley Yang", email = "yxnian@outlook.com" }]
 urls = { Homepage = "https://github.com/wesleyel/pdf-bookmark", Source = "https://github.com/wesleyel/pdf-bookmark" }
